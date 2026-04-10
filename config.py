@@ -35,6 +35,9 @@ RSS_CRON_SCHEDULE = os.getenv("RSS_CRON_SCHEDULE", "0 5 * * *")  # stored for re
 RSS_CRON_HOUR = int(os.getenv("RSS_CRON_HOUR", "5"))
 RSS_CRON_MIN = int(os.getenv("RSS_CRON_MIN", "0"))
 
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_URL = os.getenv("REDIS_URL", f"redis://${REDIS_PASSWORD}@127.0.0.1:6379/1")
+
 # CPU monitor settings
 CPU_THRESHOLD = float(os.getenv("CPU_THRESHOLD", "80.0"))
 CPU_CHECK_INTERVAL = int(os.getenv("CPU_CHECK_INTERVAL", "30"))  # seconds

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from datetime import datetime
 
 import config
@@ -7,6 +8,7 @@ import uvicorn
 from config import logger
 from discord.ext import commands
 from fastapi import FastAPI
+from services.redis import redis_client
 from skills import rss as rss_skill
 
 # ------------------------------------------------
@@ -95,6 +97,12 @@ app = FastAPI(title="Discord Bot API")
 
 @app.get("/health")
 async def health():
+    redis_status = "ok"
+    try:
+        redis_client.ping()
+    except Exception as e:
+        redis_status = f"error: {str(e)}"
+
     return {
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
@@ -103,6 +111,7 @@ async def health():
             "user": str(bot.user) if bot.user else None,
             "latency_ms": round(bot.latency * 1000) if bot.is_ready() else None,
         },
+        "redis": redis_status,
     }
 
 
@@ -122,6 +131,13 @@ async def start_api():
 # Main Runner
 # ------------------------------------------------
 async def main():
+
+    try:
+        redis_client.ping()
+        logger.info("✅ Redis connected")
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {e}")
+        os._exit(1)
 
     # Start API server
     asyncio.create_task(start_api())

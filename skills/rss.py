@@ -1,54 +1,7 @@
 import discord
-import feedparser
 from config import FEED_MAP, logger
 from discord.ext import commands
-
-SEEN_ENTRIES = {}  # key → set
-
-
-def get_feed_key(provider, category, topic):
-    return f"{provider}:{category}:{topic}"
-
-
-def fetch_feed(provider: str, category: str, topic: str):
-    url = FEED_MAP[provider][category][topic]
-    feed = feedparser.parse(url)
-
-    if not feed.entries:
-        return None
-
-    # return [f"• **{entry.title}**\n{entry.link}" for entry in feed.entries[:5]]
-    return feed
-
-
-def fetch_new_entries(provider: str, category: str, topic: str, limit: int = 5):
-    url = FEED_MAP[provider][category][topic]
-    feed = feedparser.parse(url)
-
-    if not feed.entries:
-        return []
-
-    key = get_feed_key(provider, category, topic)
-
-    if key not in SEEN_ENTRIES:
-        SEEN_ENTRIES[key] = set()
-
-    seen = SEEN_ENTRIES[key]
-    new_entries = []
-
-    for entry in feed.entries:
-        entry_id = getattr(entry, "link", None) or getattr(entry, "id", None)
-
-        if not entry_id or entry_id in seen:
-            continue
-
-        seen.add(entry_id)
-        new_entries.append(f"• **{entry.title}**\n{entry.link}")
-
-        if len(new_entries) >= limit:
-            break
-
-    return new_entries
+from skills.rss_cache import get_new_entries
 
 
 async def provider_autocomplete(interaction, current):
@@ -129,10 +82,15 @@ async def rss_slash(
 
     await interaction.response.defer()
 
-    feed = fetch_new_entries(provider, category, topic)
+    feed = get_new_entries(
+        interaction.channel_id,
+        provider,
+        category,
+        topic,
+    )
 
     if not feed:
-        await interaction.followup.send("❌ No entries found.")
+        await interaction.followup.send("📭 No new articles right now.")
         return
 
     await interaction.followup.send(f"📰 **{provider} / {category} / {topic}**")
@@ -145,7 +103,7 @@ async def rss_slash(
     )
 
     # await thread.send("\n\n".join(messages))
-    for entry in feed[:5]:
+    for entry in feed:
         await thread.send(entry)
 
 
@@ -176,10 +134,15 @@ async def rss(ctx: commands.Context, provider: str, category: str, topic: str = 
         )
         return
 
-    feed = fetch_new_entries(provider, category, topic)
+    feed = get_new_entries(
+        ctx.channel.id,
+        provider,
+        category,
+        topic,
+    )
 
     if not feed:
-        await ctx.send("❌ No entries found.")
+        await ctx.send("📭 No new articles right now.")
         return
 
     parent = await ctx.send(f"📰 **{provider} / {category} / {topic}**")
@@ -190,5 +153,5 @@ async def rss(ctx: commands.Context, provider: str, category: str, topic: str = 
     )
 
     # await thread.send("\n\n".join(messages))
-    for entry in feed[:5]:
+    for entry in feed:
         await thread.send(entry)
