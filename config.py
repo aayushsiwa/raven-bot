@@ -35,8 +35,25 @@ RSS_CRON_SCHEDULE = os.getenv("RSS_CRON_SCHEDULE", "0 5 * * *")  # stored for re
 RSS_CRON_HOUR = int(os.getenv("RSS_CRON_HOUR", "5"))
 RSS_CRON_MIN = int(os.getenv("RSS_CRON_MIN", "0"))
 
+RSS_SUB_INTERVAL = int(os.getenv("RSS_SUB_INTERVAL", 43200))
+RSS_SUB_INTERVAL_IN_HOURS = RSS_SUB_INTERVAL // 3600
+
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-REDIS_URL = os.getenv("REDIS_URL", f"redis://${REDIS_PASSWORD}@127.0.0.1:6379/1")
+REDIS_URL = os.getenv("REDIS_URL")
+
+if not REDIS_URL:
+    REDIS_URL = f"redis://:{REDIS_PASSWORD}@127.0.0.1:6379/1"
+
+
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE", "postgres")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN")
+
+if not POSTGRES_DSN:
+    POSTGRES_DSN = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DATABASE}"
 
 # CPU monitor settings
 CPU_THRESHOLD = float(os.getenv("CPU_THRESHOLD", "80.0"))
