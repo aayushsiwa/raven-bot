@@ -78,26 +78,117 @@ FEED_MAP = {
         },
         "entertainment": {
             "film": "https://www.theverge.com/rss/film/index.xml",
-            "tv": "https://www.theverge.com/rss/tv-shows/index.xml",
             "streaming": "https://www.theverge.com/rss/streaming/index.xml",
         },
-        "gaming": {
-            "gaming": "https://www.theverge.com/rss/gaming/index.xml",
-        },
         "science": {
-            "science": "https://www.theverge.com/rss/science/index.xml",
+            "general": "https://www.theverge.com/rss/science/index.xml",
             "space": "https://www.theverge.com/rss/space/index.xml",
-            "climate": "https://www.theverge.com/rss/climate/index.xml",
         },
         "business": {
-            "crypto": "https://www.theverge.com/rss/crypto/index.xml",
             "tesla": "https://www.theverge.com/rss/tesla/index.xml",
             "elon": "https://www.theverge.com/rss/elon-musk/index.xml",
+            "general": "https://www.theverge.com/rss/business/index.xml",
         },
     },
     "hn": {
         "tech": {
+            "latest": "https://hnrss.org/newest",
             "frontpage": "https://hnrss.org/frontpage",
-        }
+        },
+        "career": {
+            "jobs": "https://hnrss.org/jobs",
+        },
+    },
+    "xda": {
+        "news": {
+            "general": "https://www.xda-developers.com/feed/",
+            "latest": "https://www.xda-developers.com/feed/news/",
+        },
+        "hardware": {
+            "general": "https://www.xda-developers.com/feed/category/pc-hardware/",
+            "cpu": "https://www.xda-developers.com/feed/processor/",
+            "storage": "https://www.xda-developers.com/feed/storage/",
+            "monitor": "https://www.xda-developers.com/feed/monitor/",
+            "input": "https://www.xda-developers.com/feed/input-device/",
+        },
+        "software": {
+            "general": "https://www.xda-developers.com/feed/software-and-services/",
+            "productivity": "https://www.xda-developers.com/feed/productivity/",
+            "self_hosting": "https://www.xda-developers.com/feed/self-hosting/",
+            "home_lab": "https://www.xda-developers.com/feed/home-lab/",
+        },
+        "systems": {
+            "windows": "https://www.xda-developers.com/feed/windows/",
+            "linux": "https://www.xda-developers.com/feed/category/linux-hub/",
+            "macos": "https://www.xda-developers.com/feed/category/macos/",
+        },
+        "devices": {
+            "general": "https://www.xda-developers.com/feed/devices/",
+            "sbc": "https://www.xda-developers.com/feed/single-board-computers/",
+            "laptops": "https://www.xda-developers.com/feed/laptops/",
+            "handheld": "https://www.xda-developers.com/feed/gaming-handhelds/",
+            "prebuilt": "https://www.xda-developers.com/feed/prebuilt-pc/",
+        },
+        "network": {
+            "networking": "https://www.xda-developers.com/feed/networking/",
+            "smart_home": "https://www.xda-developers.com/feed/smart-home/",
+        },
+        "entertainment": {
+            "general": "https://www.xda-developers.com/feed/entertainment/",
+            "segment": "https://www.xda-developers.com/feed/entertainment-segment/",
+            "gaming": "https://www.xda-developers.com/feed/gaming/",
+            "tv": "https://www.xda-developers.com/feed/tv/",
+        },
+    },
+    "howtogeek": {
+        "general": {
+            "general": "https://www.howtogeek.com/feed/",
+            "news": "https://www.howtogeek.com/feed/news/",
+        },
+        "systems": {
+            "desktop": "https://www.howtogeek.com/feed/category/desktop/",
+            "windows": "https://www.howtogeek.com/feed/category/windows/",
+            "mac": "https://www.howtogeek.com/feed/category/mac/",
+            "linux": "https://www.howtogeek.com/feed/category/linux/",
+        },
+        "mobile": {
+            "android": "https://www.howtogeek.com/feed/category/android/",
+            "ios": "https://www.howtogeek.com/feed/category/ios/",
+            "general": "https://www.howtogeek.com/feed/category/mobile/",
+        },
+        "hardware": {
+            "general": "https://www.howtogeek.com/feed/category/hardware/",
+            "smart_home": "https://www.howtogeek.com/feed/category/smart-home/",
+        },
+        "buying": {
+            "deals": "https://www.howtogeek.com/feed/tag/deals/",
+            "guides": "https://www.howtogeek.com/feed/buying-guides/",
+            "reviews": "https://www.howtogeek.com/feed/category/product-reviews/",
+        },
+        "companies": {
+            "microsoft": "https://www.howtogeek.com/feed/category/microsoft/",
+            "google": "https://www.howtogeek.com/feed/tag/google/",
+        },
+        "security": {
+            "cybersecurity": "https://www.howtogeek.com/feed/category/cybersecurity/",
+        },
+        "web": {
+            "general": "https://www.howtogeek.com/feed/category/web/",
+        },
+        "entertainment": {
+            "streaming": "https://www.howtogeek.com/feed/category/streaming/",
+            "gaming": "https://www.howtogeek.com/feed/category/video-games/",
+        },
+        "science": {
+            "space": "https://www.howtogeek.com/feed/category/space/",
+            "cutting_edge": "https://www.howtogeek.com/feed/category/cutting-edge/",
+        },
+        "lifestyle": {
+            "hobbies": "https://www.howtogeek.com/feed/category/hobbies/",
+            "automotive": "https://www.howtogeek.com/feed/category/automotive/",
+        },
+        "dev": {
+            "programming": "https://www.howtogeek.com/feed/category/programming/",
+        },
     },
 }
