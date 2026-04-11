@@ -4,7 +4,6 @@ aiosignal==1.4.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
-APScheduler==3.10.4
 asyncpg==0.31.0
 attrs==26.1.0
 cffi==2.0.0
@@ -17,7 +16,6 @@ h11==0.16.0
 idna==3.11
 multidict==6.7.1
 propcache==0.4.1
-py-cord==2.6.1
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
