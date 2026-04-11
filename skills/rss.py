@@ -42,7 +42,7 @@ async def rss_slash(
     interaction: discord.Interaction,
     provider: str,
     category: str,
-    topic: str = None,
+    topic: str,
 ):
     provider = provider.lower()
     category = category.lower()
