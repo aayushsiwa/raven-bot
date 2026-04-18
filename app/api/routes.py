@@ -2,7 +2,7 @@ from typing import Optional, List
 
 import config
 from discord.ext import commands
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from services import db
 from services.redis import redis_client
 from skills.rss_cache import fetch_feed_with_cache
@@ -10,10 +10,28 @@ from datetime import datetime
 
 from app.api.deps import normalize_feed_path
 from app.api.schemas import SubscriptionDeletePayload, SubscriptionPayload, BatchRssPayload
+from app.api.auth import (
+    extract_bearer_token,
+    hash_password,
+    parse_session_token,
+    sign_session_token,
+    verify_password,
+)
+from app.api.schemas import LoginPayload, OAuthLoginPayload, SignupPayload
 
 
 def create_api_router(bot: commands.Bot) -> APIRouter:
     router = APIRouter()
+
+    allowed_oauth_providers = {"google", "github", "discord"}
+
+    def sanitize_username(value: str) -> str:
+        normalized = value.strip()
+        if not (3 <= len(normalized) <= 32):
+            raise HTTPException(status_code=422, detail="Username length must be 3..32")
+        if not all(ch.isalnum() or ch in {"_", "-", "."} for ch in normalized):
+            raise HTTPException(status_code=422, detail="Username has invalid characters")
+        return normalized
 
     @router.head("/health")
     async def health_head():
@@ -44,6 +62,83 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             "db": db_status,
             "redis": redis_status,
         }
+
+    @router.post("/api/v1/auth/signup")
+    async def signup(payload: SignupPayload):
+        username = sanitize_username(payload.username)
+        exists = await db.username_exists(username)
+        if exists:
+            raise HTTPException(status_code=409, detail="Username already exists")
+
+        user = await db.create_local_user(username, hash_password(payload.password))
+        if not user:
+            raise HTTPException(status_code=409, detail="Username already exists")
+
+        token = sign_session_token(user["id"], user["username"])
+        return {
+            "token": token,
+            "user": user,
+        }
+
+    @router.post("/api/v1/auth/login")
+    async def login(payload: LoginPayload):
+        username = sanitize_username(payload.username)
+        user = await db.get_user_by_username(username)
+        if not user or not user.get("password_hash"):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        if not verify_password(payload.password, str(user["password_hash"])):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        token = sign_session_token(user["id"], user["username"])
+        return {
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user.get("email"),
+                "display_name": user.get("display_name"),
+                "avatar_url": user.get("avatar_url"),
+                "auth_source": user.get("auth_source"),
+                "created_at": user.get("created_at"),
+            },
+        }
+
+    @router.post("/api/v1/auth/oauth")
+    async def oauth_login(payload: OAuthLoginPayload):
+        provider = payload.provider.strip().lower()
+        if provider not in allowed_oauth_providers:
+            raise HTTPException(status_code=422, detail="Unsupported provider")
+
+        username = sanitize_username(payload.username)
+
+        existing = await db.get_user_by_oauth(provider, payload.provider_user_id)
+        if existing:
+            token = sign_session_token(existing["id"], existing["username"])
+            return {"token": token, "user": existing}
+
+        user = await db.create_oauth_user(
+            username=username,
+            provider=provider,
+            provider_user_id=payload.provider_user_id,
+            email=payload.email,
+            display_name=payload.display_name,
+            avatar_url=payload.avatar_url,
+        )
+        if not user:
+            raise HTTPException(status_code=409, detail="Username already exists")
+
+        token = sign_session_token(user["id"], user["username"])
+        return {"token": token, "user": user}
+
+    @router.get("/api/v1/auth/me")
+    async def auth_me(authorization: Optional[str] = Header(default=None)):
+        token = extract_bearer_token(authorization)
+        claims = parse_session_token(token)
+        user = await db.get_user_by_id(claims["user_id"])
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return {"user": user}
 
     @router.get("/api/v1/tree")
     async def get_feed_tree():
