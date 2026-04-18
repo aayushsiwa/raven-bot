@@ -14,6 +14,7 @@ feedparser==6.0.11
 frozenlist==1.8.0
 h11==0.16.0
 idna==3.11
+httpx==0.28.1
 multidict==6.7.1
 propcache==0.4.1
 pycparser==3.0

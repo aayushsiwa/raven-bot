@@ -1,8 +1,10 @@
 from typing import Optional, List
+from urllib.parse import urlencode
 
 import config
 from discord.ext import commands
 from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi.responses import RedirectResponse
 from services import db
 from services.redis import redis_client
 from skills.rss_cache import fetch_feed_with_cache
@@ -17,6 +19,13 @@ from app.api.auth import (
     sign_session_token,
     validate_password_or_422,
     verify_password,
+)
+from app.api.oauth import (
+    build_oauth_start_url,
+    create_oauth_state,
+    exchange_code_for_profile,
+    normalized_username_candidates,
+    parse_oauth_state,
 )
 from app.api.schemas import FeedPreferencesPayload, LoginPayload, OAuthLoginPayload, SignupPayload
 
@@ -33,6 +42,14 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         if not all(ch.isalnum() or ch in {"_", "-", "."} for ch in normalized):
             raise HTTPException(status_code=422, detail="Username has invalid characters")
         return normalized
+
+    async def auth_user_from_header(authorization: Optional[str]):
+        token = extract_bearer_token(authorization)
+        claims = parse_session_token(token)
+        user = await db.get_user_by_id(claims["user_id"])
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user, claims
 
     @router.head("/health")
     async def health_head():
@@ -133,22 +150,68 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         token = sign_session_token(user["id"], user["username"])
         return {"token": token, "user": user}
 
+    @router.get("/api/v1/auth/oauth/{provider}/start")
+    async def oauth_start(provider: str, next: str = Query("/")):
+        provider = provider.strip().lower()
+        if provider not in allowed_oauth_providers:
+            raise HTTPException(status_code=422, detail="Unsupported provider")
+
+        state = create_oauth_state(provider, next_path=next)
+        return {"url": build_oauth_start_url(provider, state)}
+
+    @router.get("/api/v1/auth/oauth/{provider}/callback")
+    async def oauth_callback(provider: str, code: str = Query(...), state: str = Query(...)):
+        provider = provider.strip().lower()
+        if provider not in allowed_oauth_providers:
+            raise HTTPException(status_code=422, detail="Unsupported provider")
+
+        state_payload = parse_oauth_state(provider, state)
+        profile = await exchange_code_for_profile(provider, code)
+        provider_user_id = str(profile.get("provider_user_id") or "")
+        if not provider_user_id:
+            raise HTTPException(status_code=401, detail="OAuth profile missing id")
+
+        existing = await db.get_user_by_oauth(provider, provider_user_id)
+        if existing:
+            token = sign_session_token(existing["id"], existing["username"])
+            query = urlencode({"token": token})
+            target = f"{config.FRONTEND_URL}{state_payload.get('next', '/') }"
+            joiner = "&" if "?" in target else "?"
+            return RedirectResponse(url=f"{target}{joiner}{query}", status_code=302)
+
+        chosen_user = None
+        for candidate in normalized_username_candidates(provider, str(profile.get("username_seed") or provider)):
+            try:
+                chosen_user = await db.create_oauth_user(
+                    username=sanitize_username(candidate),
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    email=profile.get("email"),
+                    display_name=profile.get("display_name"),
+                    avatar_url=profile.get("avatar_url"),
+                )
+            except Exception:
+                chosen_user = None
+            if chosen_user:
+                break
+
+        if not chosen_user:
+            raise HTTPException(status_code=409, detail="Could not allocate username")
+
+        token = sign_session_token(chosen_user["id"], chosen_user["username"])
+        query = urlencode({"token": token})
+        target = f"{config.FRONTEND_URL}{state_payload.get('next', '/') }"
+        joiner = "&" if "?" in target else "?"
+        return RedirectResponse(url=f"{target}{joiner}{query}", status_code=302)
+
     @router.get("/api/v1/auth/me")
     async def auth_me(authorization: Optional[str] = Header(default=None)):
-        token = extract_bearer_token(authorization)
-        claims = parse_session_token(token)
-        user = await db.get_user_by_id(claims["user_id"])
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+        user, _ = await auth_user_from_header(authorization)
         return {"user": user}
 
     @router.get("/api/v1/user/feed-preferences")
     async def get_user_feed_preferences(authorization: Optional[str] = Header(default=None)):
-        token = extract_bearer_token(authorization)
-        claims = parse_session_token(token)
-        user = await db.get_user_by_id(claims["user_id"])
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+        _, claims = await auth_user_from_header(authorization)
 
         choices = await db.list_user_feed_preferences(claims["user_id"])
         return {"choices": choices}
@@ -158,11 +221,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         payload: FeedPreferencesPayload,
         authorization: Optional[str] = Header(default=None),
     ):
-        token = extract_bearer_token(authorization)
-        claims = parse_session_token(token)
-        user = await db.get_user_by_id(claims["user_id"])
-        if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+        _, claims = await auth_user_from_header(authorization)
 
         normalized = []
         seen = set()
@@ -180,6 +239,35 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
 
         await db.replace_user_feed_preferences(claims["user_id"], normalized)
         return {"choices": normalized}
+
+    @router.get("/api/v1/user/feed")
+    async def get_user_personal_feed(
+        authorization: Optional[str] = Header(default=None),
+        limit: int = Query(12, ge=1, le=30),
+    ):
+        _, claims = await auth_user_from_header(authorization)
+        choices = await db.list_user_feed_preferences(claims["user_id"])
+        results = []
+        for choice in choices:
+            try:
+                p, c, t = normalize_feed_path(choice["provider"], choice["category"], choice["topic"])
+                entries = fetch_feed_with_cache(p, c, t, limit=limit)
+                results.append(
+                    {
+                        "provider": p,
+                        "category": c,
+                        "topic": t,
+                        "count": len(entries),
+                        "entries": entries,
+                    }
+                )
+            except Exception:
+                continue
+
+        return {
+            "generated_at": datetime.utcnow().isoformat(),
+            "results": results,
+        }
 
     @router.get("/api/v1/tree")
     async def get_feed_tree():
