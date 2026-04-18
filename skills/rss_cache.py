@@ -63,7 +63,7 @@ def fetch_feed_with_url(url: str, limit: int = 5):
         if entry.get("content") and isinstance(entry.get("content"), list):
             first = entry.get("content")[0]
             if isinstance(first, dict):
-                content_text = str(first.get("value") or ""))
+                content_text = str(first.get("value") or "")
 
         if not content_text:
             content_text = str(entry.get("summary") or "")

@@ -8,8 +8,9 @@ redis_client = redis.from_url(REDIS_URL)
 
 TOKEN_BLACKLIST_PREFIX = "auth:token:blacklist:"
 RATE_LIMIT_PREFIX = "ratelimit:"
-RATE_LIMIT_WINDOW = 60  # seconds
-RATE_LIMIT_MAX = 10  # requests per window
+RATE_LIMIT_WINDOW = 1  # seconds
+# TODO: prefer keeping it to 10rps
+RATE_LIMIT_MAX = 100  # requests per window
 
 
 def blacklist_session_token(token: str) -> None:
