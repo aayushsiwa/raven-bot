@@ -58,6 +58,7 @@ if not POSTGRES_DSN:
 
 AUTH_SECRET = os.getenv("AUTH_SECRET", "dev-insecure-auth-secret-change-me")
 AUTH_TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "604800"))
+AUTH_ISSUER = os.getenv("AUTH_ISSUER", "raven-api")
 
 # CPU monitor settings
 CPU_THRESHOLD = float(os.getenv("CPU_THRESHOLD", "80.0"))

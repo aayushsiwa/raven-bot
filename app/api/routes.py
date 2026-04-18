@@ -15,6 +15,7 @@ from app.api.auth import (
     hash_password,
     parse_session_token,
     sign_session_token,
+    validate_password_or_422,
     verify_password,
 )
 from app.api.schemas import LoginPayload, OAuthLoginPayload, SignupPayload
@@ -66,6 +67,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
     @router.post("/api/v1/auth/signup")
     async def signup(payload: SignupPayload):
         username = sanitize_username(payload.username)
+        validate_password_or_422(payload.password)
         exists = await db.username_exists(username)
         if exists:
             raise HTTPException(status_code=409, detail="Username already exists")
