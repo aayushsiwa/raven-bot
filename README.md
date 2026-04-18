@@ -15,6 +15,7 @@ It includes:
 - List and remove subscriptions
 - Thread-based article delivery in Discord
 - Health checks for bot, Redis, and PostgreSQL
+- REST API for feed discovery, fetch, and subscription CRUD
 
 ## Tech Stack
 
@@ -27,7 +28,14 @@ It includes:
 
 ## Project Layout
 
-- `main.py` - Bot commands/events, app startup, FastAPI routes
+- `main.py` - Runtime bootstrap (db/redis checks, start bot + api)
+- `app/app_factory.py` - FastAPI app factory
+- `app/api/routes.py` - FastAPI route definitions
+- `app/api/schemas.py` - API request schemas
+- `app/api/deps.py` - Shared API validation helpers
+- `app/bot/client.py` - Discord bot client creation
+- `app/bot/commands.py` - Prefix + slash command registration
+- `app/bot/events.py` - Discord event registration
 - `config.py` - Environment loading and feed catalog (`FEED_MAP`)
 - `skills/rss.py` - RSS command handling + autocomplete
 - `skills/rss_cache.py` - Feed fetch/cache and dedupe logic
@@ -168,3 +176,40 @@ bash test_feeds.sh
 - Subscriptions are persisted in table `rss_subscriptions` created at startup.
 - `main.py` starts Discord bot, FastAPI server, and RSS worker in one process.
 - Health endpoint is available at `GET /health` and `HEAD /health`.
+
+## API Endpoints
+
+Base URL: `http://127.0.0.1:${PORT:-8080}`
+
+- `GET /health` - service health (bot + db + redis)
+- `GET /api/v1/providers` - list providers
+- `GET /api/v1/providers/{provider}/categories` - list categories
+- `GET /api/v1/providers/{provider}/categories/{category}/topics` - list topics
+- `GET /api/v1/rss?provider=...&category=...&topic=...&limit=5` - fetch feed entries
+- `GET /api/v1/subscriptions` - list all subscriptions
+- `GET /api/v1/subscriptions?channel_id=123` - list by channel
+- `POST /api/v1/subscriptions` - create subscription
+- `DELETE /api/v1/subscriptions` - delete subscription
+
+Create subscription payload:
+
+```json
+{
+  "channel_id": 123456789012345678,
+  "guild_id": 123456789012345678,
+  "provider": "verge",
+  "category": "tech",
+  "topic": "android"
+}
+```
+
+Delete subscription payload:
+
+```json
+{
+  "channel_id": 123456789012345678,
+  "provider": "verge",
+  "category": "tech",
+  "topic": "android"
+}
+```
