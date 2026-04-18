@@ -1,7 +1,7 @@
 import os
 from enum import StrEnum
 from urllib.parse import urljoin
-
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -62,7 +62,9 @@ AUTH_TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "604800"))
 AUTH_ISSUER = os.getenv("AUTH_ISSUER", "raven-api")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-OAUTH_CALLBACK_BASE = os.getenv("OAUTH_CALLBACK_BASE", f"http://127.0.0.1:{PORT}").rstrip("/")
+OAUTH_CALLBACK_BASE = os.getenv(
+    "OAUTH_CALLBACK_BASE", f"http://127.0.0.1:{PORT}"
+).rstrip("/")
 
 OAUTH_GOOGLE_CLIENT_ID = os.getenv("OAUTH_GOOGLE_CLIENT_ID")
 OAUTH_GOOGLE_CLIENT_SECRET = os.getenv("OAUTH_GOOGLE_CLIENT_SECRET")
@@ -76,6 +78,7 @@ OAUTH_DISCORD_CLIENT_SECRET = os.getenv("OAUTH_DISCORD_CLIENT_SECRET")
 
 def oauth_callback_url(provider: str) -> str:
     return urljoin(f"{OAUTH_CALLBACK_BASE}/", f"api/v1/auth/oauth/{provider}/callback")
+
 
 # CPU monitor settings
 CPU_THRESHOLD = float(os.getenv("CPU_THRESHOLD", "80.0"))
