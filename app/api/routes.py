@@ -240,6 +240,33 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         await db.replace_user_feed_preferences(claims["user_id"], normalized)
         return {"choices": normalized}
 
+    @router.post("/api/v1/user/feed-preferences/sync-local")
+    async def sync_local_preferences_once(
+        payload: FeedPreferencesPayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        _, claims = await auth_user_from_header(authorization)
+        current = await db.list_user_feed_preferences(claims["user_id"])
+        if current:
+            return {"choices": current, "used": "db"}
+
+        normalized = []
+        seen = set()
+        for choice in payload.choices:
+            provider, category, topic = normalize_feed_path(choice.provider, choice.category, choice.topic)
+            dedupe_key = f"{provider}:{category}:{topic}"
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            normalized.append({
+                "provider": provider,
+                "category": category,
+                "topic": topic,
+            })
+
+        await db.replace_user_feed_preferences(claims["user_id"], normalized)
+        return {"choices": normalized, "used": "local"}
+
     @router.get("/api/v1/user/feed")
     async def get_user_personal_feed(
         authorization: Optional[str] = Header(default=None),
