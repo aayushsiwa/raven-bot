@@ -27,6 +27,9 @@ class FeedBatchRequest(BaseModel):
 class BatchRssPayload(BaseModel):
     feeds: list[FeedBatchRequest]
     limit: int = Field(5, ge=1, le=30)
+    cursor: Optional[int] = Field(default=None, ge=0)
+    from_ts: Optional[int] = Field(default=None, ge=0)
+    to_ts: Optional[int] = Field(default=None, ge=0)
 
 
 class SignupPayload(BaseModel):
