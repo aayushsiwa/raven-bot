@@ -46,3 +46,13 @@ class OAuthLoginPayload(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
     display_name: Optional[str] = Field(default=None, max_length=255)
     avatar_url: Optional[str] = Field(default=None, max_length=1000)
+
+
+class FeedPreferenceChoice(BaseModel):
+    provider: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    topic: str = Field(..., min_length=1)
+
+
+class FeedPreferencesPayload(BaseModel):
+    choices: list[FeedPreferenceChoice] = Field(default_factory=list)

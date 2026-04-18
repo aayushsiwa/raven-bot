@@ -18,7 +18,7 @@ from app.api.auth import (
     validate_password_or_422,
     verify_password,
 )
-from app.api.schemas import LoginPayload, OAuthLoginPayload, SignupPayload
+from app.api.schemas import FeedPreferencesPayload, LoginPayload, OAuthLoginPayload, SignupPayload
 
 
 def create_api_router(bot: commands.Bot) -> APIRouter:
@@ -141,6 +141,45 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         return {"user": user}
+
+    @router.get("/api/v1/user/feed-preferences")
+    async def get_user_feed_preferences(authorization: Optional[str] = Header(default=None)):
+        token = extract_bearer_token(authorization)
+        claims = parse_session_token(token)
+        user = await db.get_user_by_id(claims["user_id"])
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        choices = await db.list_user_feed_preferences(claims["user_id"])
+        return {"choices": choices}
+
+    @router.put("/api/v1/user/feed-preferences")
+    async def put_user_feed_preferences(
+        payload: FeedPreferencesPayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        token = extract_bearer_token(authorization)
+        claims = parse_session_token(token)
+        user = await db.get_user_by_id(claims["user_id"])
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        normalized = []
+        seen = set()
+        for choice in payload.choices:
+            provider, category, topic = normalize_feed_path(choice.provider, choice.category, choice.topic)
+            dedupe_key = f"{provider}:{category}:{topic}"
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            normalized.append({
+                "provider": provider,
+                "category": category,
+                "topic": topic,
+            })
+
+        await db.replace_user_feed_preferences(claims["user_id"], normalized)
+        return {"choices": normalized}
 
     @router.get("/api/v1/tree")
     async def get_feed_tree():

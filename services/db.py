@@ -48,6 +48,18 @@ async def init_db():
             )
         """)
 
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_feed_preferences (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                provider TEXT NOT NULL,
+                category TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (user_id, provider, category, topic)
+            )
+        """)
+
 
 async def add_subscription(channel_id, guild_id, provider, category, topic):
     async with pool.acquire() as conn:
@@ -227,3 +239,42 @@ async def create_oauth_user(
 async def ping():
     async with pool.acquire() as conn:
         await conn.execute("SELECT 1")
+
+
+async def list_user_feed_preferences(user_id: int):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT provider, category, topic
+            FROM user_feed_preferences
+            WHERE user_id = $1
+            ORDER BY created_at ASC, id ASC
+            """,
+            user_id,
+        )
+        return [dict(row) for row in rows]
+
+
+async def replace_user_feed_preferences(user_id: int, choices: list[dict]):
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                DELETE FROM user_feed_preferences
+                WHERE user_id = $1
+                """,
+                user_id,
+            )
+
+            if choices:
+                await conn.executemany(
+                    """
+                    INSERT INTO user_feed_preferences (user_id, provider, category, topic)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id, provider, category, topic) DO NOTHING
+                    """,
+                    [
+                        (user_id, choice["provider"], choice["category"], choice["topic"])
+                        for choice in choices
+                    ],
+                )
