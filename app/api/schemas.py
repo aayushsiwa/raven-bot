@@ -56,3 +56,28 @@ class FeedPreferenceChoice(BaseModel):
 
 class FeedPreferencesPayload(BaseModel):
     choices: list[FeedPreferenceChoice] = Field(default_factory=list)
+
+
+class CustomFeedPayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    url: str = Field(..., min_length=10, max_length=2048)
+    category: str = Field(default="custom", min_length=1, max_length=64)
+    topic: str = Field(default="user", min_length=1, max_length=64)
+
+
+class CustomFeedUpdatePayload(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    is_active: Optional[bool] = Field(default=None)
+
+
+class LinkProviderPayload(BaseModel):
+    provider: str = Field(..., min_length=3, max_length=32)
+    state: str = Field(..., min_length=1)
+    code: str = Field(..., min_length=1)
+
+
+class SaveArticlePayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=500)
+    url: str = Field(..., min_length=10, max_length=2048)
+    summary: Optional[str] = Field(default=None, max_length=2000)
+    source: Optional[str] = Field(default=None, max_length=255)

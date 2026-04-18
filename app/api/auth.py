@@ -8,6 +8,7 @@ import jwt
 from fastapi import HTTPException
 
 import config
+from services.redis import is_token_blacklisted
 
 
 PASSWORD_UPPER = re.compile(r"[A-Z]")
@@ -63,6 +64,8 @@ def sign_session_token(user_id: int, username: str) -> str:
 
 
 def parse_session_token(token: str) -> dict:
+    if is_token_blacklisted(token):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
     try:
         payload = jwt.decode(
             token,

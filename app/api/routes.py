@@ -6,12 +6,12 @@ from discord.ext import commands
 from fastapi import APIRouter, HTTPException, Query, Header
 from fastapi.responses import RedirectResponse
 from services import db
-from services.redis import redis_client
+from services.redis import blacklist_session_token, redis_client
 from skills.rss_cache import fetch_feed_with_cache
 from datetime import datetime
 
 from app.api.deps import normalize_feed_path
-from app.api.schemas import SubscriptionDeletePayload, SubscriptionPayload, BatchRssPayload
+from app.api.schemas import SubscriptionDeletePayload, SubscriptionPayload, BatchRssPayload, CustomFeedPayload, CustomFeedUpdatePayload, LinkProviderPayload, SaveArticlePayload
 from app.api.auth import (
     extract_bearer_token,
     hash_password,
@@ -209,6 +209,14 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         user, _ = await auth_user_from_header(authorization)
         return {"user": user}
 
+    @router.post("/api/v1/auth/logout")
+    async def logout(authorization: Optional[str] = Header(default=None)):
+        """Blacklist current token and log out."""
+        user, claims = await auth_user_from_header(authorization)
+        token = extract_bearer_token(authorization)
+        blacklist_session_token(token)
+        return {"status": "logged out", "user_id": user["id"]}
+
     @router.get("/api/v1/user/feed-preferences")
     async def get_user_feed_preferences(authorization: Optional[str] = Header(default=None)):
         _, claims = await auth_user_from_header(authorization)
@@ -273,7 +281,10 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         limit: int = Query(12, ge=1, le=30),
     ):
         _, claims = await auth_user_from_header(authorization)
+
         choices = await db.list_user_feed_preferences(claims["user_id"])
+        custom_feeds = await db.list_user_custom_feeds(claims["user_id"])
+
         results = []
         for choice in choices:
             try:
@@ -284,6 +295,24 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
                         "provider": p,
                         "category": c,
                         "topic": t,
+                        "count": len(entries),
+                        "entries": entries,
+                    }
+                )
+            except Exception:
+                continue
+
+        for feed in custom_feeds:
+            if not feed.get("is_active"):
+                continue
+            try:
+                entries = fetch_feed_with_url(feed["url"], limit=limit)
+                results.append(
+                    {
+                        "provider": "custom",
+                        "category": feed.get("category", "custom"),
+                        "topic": feed.get("topic", "user"),
+                        "feed_url": feed["url"],
                         "count": len(entries),
                         "entries": entries,
                     }
@@ -453,5 +482,140 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         return {
             "subscriptions": [dict(sub) for sub in subs],
         }
+
+    @router.get("/api/v1/user/custom-feeds")
+    async def get_custom_feeds(authorization: Optional[str] = Header(default=None)):
+        user, claims = await auth_user_from_header(authorization)
+        feeds = await db.list_user_custom_feeds(claims["user_id"])
+        return {"feeds": feeds}
+
+    @router.post("/api/v1/user/custom-feeds")
+    async def create_custom_feed(
+        payload: CustomFeedPayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        feed = await db.add_user_custom_feed(
+            claims["user_id"],
+            payload.title,
+            payload.url,
+            payload.category,
+            payload.topic,
+        )
+        if not feed:
+            raise HTTPException(status_code=409, detail="Feed URL already exists")
+        return {"feed": feed}
+
+    @router.put("/api/v1/user/custom-feeds/{feed_id}")
+    async def update_custom_feed(
+        feed_id: int,
+        payload: CustomFeedUpdatePayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        feed = await db.update_user_custom_feed(
+            claims["user_id"],
+            feed_id,
+            payload.title,
+            payload.is_active,
+        )
+        if not feed:
+            raise HTTPException(status_code=404, detail="Feed not found")
+        return {"feed": feed}
+
+    @router.delete("/api/v1/user/custom-feeds/{feed_id}")
+    async def delete_custom_feed(
+        feed_id: int,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        deleted = await db.delete_user_custom_feed(claims["user_id"], feed_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Feed not found")
+        return {"status": "deleted"}
+
+    @router.get("/api/v1/user/link-provider/start")
+    async def start_link_provider(
+        provider: str,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        provider = provider.strip().lower()
+        if provider not in allowed_oauth_providers:
+            raise HTTPException(status_code=422, detail="Unsupported provider")
+
+        state = create_oauth_state(provider, next_path="/api/v1/user/link-provider/callback")
+        await db.create_oauth_link_request(claims["user_id"], provider, state)
+        return {"url": build_oauth_start_url(provider, state)}
+
+    @router.post("/api/v1/user/link-provider")
+    async def link_provider(
+        payload: LinkProviderPayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        provider = payload.provider.strip().lower()
+        if provider not in allowed_oauth_providers:
+            raise HTTPException(status_code=422, detail="Unsupported provider")
+
+        request = await db.consume_oauth_link_request(provider, payload.state)
+        if not request:
+            raise HTTPException(status_code=400, detail="Invalid or expired link request")
+
+        profile = await exchange_code_for_profile(provider, payload.code)
+        provider_user_id = str(profile.get("provider_user_id") or "")
+        if not provider_user_id:
+            raise HTTPException(status_code=400, detail="OAuth profile missing id")
+
+        linked = await db.link_oauth_account(
+            claims["user_id"],
+            provider,
+            provider_user_id,
+            profile.get("email"),
+        )
+        if not linked:
+            raise HTTPException(status_code=409, detail="Account already linked to another user")
+
+        return {"status": "linked", "provider": provider}
+
+    @router.get("/api/v1/user/linked-accounts")
+    async def get_linked_accounts(authorization: Optional[str] = Header(default=None)):
+        user, claims = await auth_user_from_header(authorization)
+        accounts = await db.list_oauth_accounts_for_user(claims["user_id"])
+        return {"accounts": accounts}
+
+    @router.get("/api/v1/user/saved-articles")
+    async def get_saved_articles(authorization: Optional[str] = Header(default=None)):
+        user, claims = await auth_user_from_header(authorization)
+        articles = await db.list_user_saved_articles(claims["user_id"])
+        return {"articles": articles}
+
+    @router.post("/api/v1/user/saved-articles")
+    async def save_article(
+        payload: SaveArticlePayload,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        article = await db.save_article(
+            claims["user_id"],
+            payload.title,
+            payload.url,
+            payload.summary,
+            payload.source,
+        )
+        if not article:
+            raise HTTPException(status_code=409, detail="Article already saved")
+        return {"article": article}
+
+    @router.delete("/api/v1/user/saved-articles/{article_id}")
+    async def delete_saved_article(
+        article_id: int,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user, claims = await auth_user_from_header(authorization)
+        deleted = await db.delete_saved_article(claims["user_id"], article_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Article not found")
+        return {"status": "deleted"}
 
     return router
