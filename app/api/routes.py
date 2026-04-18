@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 import config
 from discord.ext import commands
 from fastapi import APIRouter, HTTPException, Query, Header
+from config import logger
 from fastapi.responses import RedirectResponse
 from services import db
 from services.redis import blacklist_session_token, redis_client
@@ -83,6 +84,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
 
     @router.post("/api/v1/auth/signup")
     async def signup(payload: SignupPayload):
+        logger.info(f"Signup attempt for username: {payload.username}")
         username = sanitize_username(payload.username)
         validate_password_or_422(payload.password)
         exists = await db.username_exists(username)
@@ -101,6 +103,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
 
     @router.post("/api/v1/auth/login")
     async def login(payload: LoginPayload):
+        logger.info(f"Login attempt for username: {payload.username}")
         username = sanitize_username(payload.username)
         user = await db.get_user_by_username(username)
         if not user or not user.get("password_hash"):
