@@ -4,32 +4,49 @@ echo "🔎 Testing RSS feeds..."
 echo "----------------------------------"
 
 FEEDS=(
-    https://www.howtogeek.com/feed/category/security/
-    https://www.howtogeek.com/feed/category/privacy/
-    https://www.howtogeek.com/feed/category/how-to/
-    https://www.howtogeek.com/feed/category/internet/
-    https://www.howtogeek.com/feed/category/gaming/
-    https://www.howtogeek.com/feed/category/iphone-ipad/
+
+  # Major Indian News RSS Feeds
+https://www.thehindu.com/news/national/feeder/default.rss
+https://indianexpress.com/feed/
+https://feeds.feedburner.com/NDTV-LatestNews
+https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml
+https://timesofindia.indiatimes.com/rssfeedstopstories.cms
+https://www.indiatoday.in/rss/1206578
+https://feeds.feedburner.com/ScrollinArticles.rss
+https://frontline.thehindu.com/feeder/default.rss
+# 💼 Business / Finance (Top tier)
+https://www.livemint.com/rss/news
+https://www.thehindubusinessline.com/feeder/default.rss
+# 📺 Large Broadcast / Digital Networks
+https://news.abplive.com/home/feed
+https://www.indiatvnews.com/rssnews/topstory.xml
+
+# General Aggregators / Portals
+https://www.dnaindia.com/feeds/india.xml
+
+
+
+    https://indianexpress.com/feed/
+    https://indianexpress.com/section/india/feed/
+    https://indianexpress.com/section/world/feed/
+    https://indianexpress.com/section/politics/feed/
+    https://indianexpress.com/section/business/feed/
+    https://indianexpress.com/section/sports/feed/
+    https://indianexpress.com/section/entertainment/feed/
+    https://indianexpress.com/section/lifestyle/feed/
+    https://indianexpress.com/section/technology/feed/
+    https://indianexpress.com/section/cities/feed/
+    https://indianexpress.com/section/explained/feed/
+    https://indianexpress.com/section/opinion/feed/
+
     https://www.howtogeek.com/feed/category/smart-home/
-    https://www.howtogeek.com/feed/category/apps/
-    https://www.howtogeek.com/feed/category/software/
-    https://www.howtogeek.com/feed/category/productivity/
-    https://www.howtogeek.com/feed/category/windows-11/
-    https://www.howtogeek.com/feed/category/chrome/
-    https://www.howtogeek.com/feed/category/microsoft-office/
     https://www.howtogeek.com/feed/category/streaming/
     "https://www.howtogeek.com/feed/"
     "https://www.howtogeek.com/feed/category/windows/"
     "https://www.howtogeek.com/feed/category/mac/"
     "https://www.howtogeek.com/feed/category/linux/"
     "https://www.howtogeek.com/feed/category/android/"
-    "https://www.howtogeek.com/feed/category/iphone-ipad/"
-    "https://www.howtogeek.com/feed/category/security/"
-    "https://www.howtogeek.com/feed/category/privacy/"
-    "https://www.howtogeek.com/feed/category/how-to/"
     "https://www.howtogeek.com/feed/category/hardware/"
-    "https://www.howtogeek.com/feed/category/internet/"
-    "https://www.howtogeek.com/feed/category/gaming/"
     https://www.howtogeek.com/feed/
 
     # Desktop / OS
@@ -37,7 +54,6 @@ FEEDS=(
     https://www.howtogeek.com/feed/category/windows/
     https://www.howtogeek.com/feed/category/mac/
     https://www.howtogeek.com/feed/category/linux/
-    https://www.howtogeek.com/feed/category/chromeos/
 
     # Buying / Deals / Reviews
     https://www.howtogeek.com/feed/tag/deals/
@@ -61,12 +77,10 @@ FEEDS=(
     https://www.howtogeek.com/feed/category/web/
 
     # Media / Entertainment
-    https://www.howtogeek.com/feed/category/audio/
     https://www.howtogeek.com/feed/category/streaming/
     https://www.howtogeek.com/feed/category/video-games/
 
     # Mobile / Ecosystem
-    https://www.howtogeek.com/feed/category/cellular/
     https://www.howtogeek.com/feed/category/ios/
     https://www.howtogeek.com/feed/category/android/
     https://www.howtogeek.com/feed/category/mobile/

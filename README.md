@@ -1,170 +1,114 @@
-# Raven
+# Raven Backend: API & Discord Bot
 
-Raven is a Discord bot that fetches RSS articles on demand and can post new feed items automatically to subscribed channels.
+Raven is a multi-modal RSS platform that powers both a premium web dashboard and a robust Discord bot. It handles feed aggregation, high-performance caching with Redis, persistent user storage with PostgreSQL, and secure OAuth 2.0 authentication.
 
-It includes:
-- Discord prefix and slash commands for RSS lookup and subscriptions
-- Redis-backed feed caching and per-channel "seen" tracking
-- PostgreSQL-backed subscription storage
-- A small FastAPI health endpoint (`/health`)
+## 🚀 Key Features
 
-## Features
+- **Multi-Source Aggregation**: Curated registry of tech, news, and specialized feeds.
+- **OAuth 2.0 Ecosystem**: Seamless sign-in via Google, GitHub, and Discord.
+- **Discord Bot**: Slash commands, feed subscriptions, and channel-based thread delivery.
+- **REST API v1**: Complete programmatic access to providers, categories, topics, and user content.
+- **Smart Caching**: Redis-backed feed deduplication and channel-level "seen" tracking.
 
-- Fetch latest feed items by `provider/category/topic`
-- Subscribe a channel to periodic updates
-- List and remove subscriptions
-- Thread-based article delivery in Discord
-- Health checks for bot, Redis, and PostgreSQL
+## 🛠 Tech Stack
 
-## Tech Stack
+- **Core**: Python 3.12, FastAPI, Uvicorn
+- **Bot**: discord.py
+- **Database**: PostgreSQL (via `asyncpg`), Redis
+- **Auth**: JWT (PyJWT), Google/GitHub/Discord OAuth
+- **Parsing**: `feedparser`
 
-- Python 3.12
-- discord.py
-- FastAPI + Uvicorn
-- Redis
-- PostgreSQL (asyncpg)
-- feedparser
-
-## Project Layout
-
-- `main.py` - Bot commands/events, app startup, FastAPI routes
-- `config.py` - Environment loading and feed catalog (`FEED_MAP`)
-- `skills/rss.py` - RSS command handling + autocomplete
-- `skills/rss_cache.py` - Feed fetch/cache and dedupe logic
-- `services/db.py` - PostgreSQL connection pool + subscription queries
-- `services/worker.py` - Background subscription polling worker
-- `services/redis.py` - Redis client setup
-- `test_feeds.sh` - Script to verify RSS URLs respond
-
-## Prerequisites
+## 📋 Prerequisites
 
 - Python 3.12+
-- A Discord application and bot token
-- Redis instance
-- PostgreSQL instance
+- Redis Server
+- PostgreSQL Server
+- Discord Developer Application & Bot Token
+- OAuth Client Credentials (Google, GitHub, and/or Discord)
 
-## Configuration
+## ⚙️ Configuration
 
-Create a `.env` file in the project root.
+Create a `.env` file in the `backend/` directory referencing the `.env.example` or the keys below.
 
-Required variables (application exits if missing):
-
+### Discord & Infrastructure
 ```env
-BOT_TOKEN=your_discord_bot_token
-PUBLIC_KEY=your_discord_public_key
-APPLICATION_ID=your_discord_application_id
-GUILD_ID=your_test_guild_id
-GUILD_CHANNEL_ID=default_guild_channel_id
-CHANNEL_ID=default_channel_id
+BOT_TOKEN=...
+PUBLIC_KEY=...
+APPLICATION_ID=...
+GUILD_ID=...
+REDIS_URL=redis://localhost:6379/1
+POSTGRES_DSN=postgres://user:pass@localhost:5432/raven
 ```
 
-Common optional variables:
-
+### Authentication (OAuth)
 ```env
-PORT=8080 # default is 8080
-RSS_SUB_INTERVAL=43200 # default is 43200 i.e. 12 hours
-RSS_FEED_SIZE=10 # default is 5
+AUTH_SECRET=your_jwt_signing_secret
+FRONTEND_URL=http://localhost:5173
+OAUTH_CALLBACK_BASE=http://localhost:8080
 
-# Redis
-REDIS_PASSWORD=password
-# Optional override
-# REDIS_URL=redis://:password@127.0.0.1:6379/1
+# Google
+OAUTH_GOOGLE_CLIENT_ID=...
+OAUTH_GOOGLE_CLIENT_SECRET=...
 
-# PostgreSQL
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
-POSTGRES_USER=user
-POSTGRES_PASSWORD=password
-POSTGRES_DATABASE=postgres
-# Optional override
-# POSTGRES_DSN=postgres://user:pass@host:5432/dbname
+# GitHub
+OAUTH_GITHUB_CLIENT_ID=...
+OAUTH_GITHUB_CLIENT_SECRET=...
+
+# Discord
+OAUTH_DISCORD_CLIENT_ID=...
+OAUTH_DISCORD_CLIENT_SECRET=...
 ```
 
-Notes:
-- `RSS_SUB_INTERVAL` is in seconds (default is 43200 = 12 hours).
-- Feed sources are defined in `config.py` under `FEED_MAP`.
+## 🏗 Project Layout
 
-## Run Locally
+- `main.py`: Main entry point (starts Bot, API, and Worker).
+- `config.py`: Centralized configuration, `Provider` enums, and `FEED_MAP`.
+- `app/api/`: FastAPI route handlers and route logic.
+- `app/bot/`: Discord bot client and command registration.
+- `services/`: Database and Redis connection management.
+- `skills/`: Core logic for RSS fetching, caching, and deduplication.
+- `test_feeds.sh`: Diagnostic script to verify all RSS source URLs.
 
-Install dependencies:
+## 📡 API Reference (v1)
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/health` | `GET` | System health check (Bot, Redis, DB). |
+| `/api/v1/auth/me` | `GET` | Get current authenticated user session. |
+| `/api/v1/auth/oauth/{provider}/login` | `GET` | Initiate OAuth flow. |
+| `/api/v1/providers` | `GET` | List all available feed providers. |
+| `/api/v1/rss?provider=...` | `GET` | Fetch stories for a specific provider/topic. |
+| `/api/v1/saved-articles` | `GET/POST` | Manage user's saved article archive. |
 
-Start the bot + API:
+## 💻 Running Locally
 
-```bash
-python main.py
-```
+1. **Setup Environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-Health check:
+2. **Initialize Database**:
+   Raven automatically creates the necessary tables on first start.
 
-```bash
-curl -s http://127.0.0.1:${PORT:-8080}/health
-```
+3. **Start the Service**:
+   ```bash
+   python main.py
+   ```
 
-## Run With Docker
+4. **Verify Feeds**:
+   ```bash
+   bash test_feeds.sh
+   ```
 
-Build and start:
+## 🐳 Running with Docker
 
 ```bash
 docker compose up --build
 ```
+This will start the API, Bot, Redis, and PostgreSQL containers as defined in the root `docker-compose.yml`.
 
-Stop:
-
-```bash
-docker compose down
-```
-
-The compose file runs the app container and exposes `${PORT}`.
-Make sure Redis/PostgreSQL are reachable from the container via your `.env` configuration.
-
-## Discord Commands
-
-Prefix commands:
-
-- `!ping`
-- `!rss <provider> <category> [topic]`
-- `!subscribe <provider> <category> <topic>`
-- `!unsubscribe <provider> <category> <topic>`
-- `!subscriptions`
-
-Slash commands:
-
-- `/ping`
-- `/rss` (with autocomplete)
-- `/subscribe`
-- `/unsubscribe`
-- `/subscriptions`
-
-## Subscription Worker Behavior
-
-- Worker starts shortly after bot startup.
-- Every `RSS_SUB_INTERVAL`, it checks all DB subscriptions.
-- For each channel subscription, it fetches feed entries and posts only unseen items.
-- Seen item IDs are stored in Redis per channel/provider/category/topic and expire after 7 days.
-
-## Feed Testing Utility
-
-To quickly verify feed URLs in `test_feeds.sh`:
-
-```bash
-bash test_feeds.sh
-```
-
-## Troubleshooting
-
-- Missing env vars: verify required keys in `.env`.
-- Redis connection errors: check `REDIS_URL` and network accessibility.
-- PostgreSQL errors: check `POSTGRES_DSN` or host/user/password/database values.
-- Bot commands not visible: confirm `GUILD_ID` and bot permissions; restart after syncing commands. # Note: This is only if you want the bot for specific Guild
-
-## Development Notes
-
-- Subscriptions are persisted in table `rss_subscriptions` created at startup.
-- `main.py` starts Discord bot, FastAPI server, and RSS worker in one process.
-- Health endpoint is available at `GET /health` and `HEAD /health`.
+---
+> [!TIP]
+> Use the `python main.py --watch` flag during development to automatically restart the service when files change.
