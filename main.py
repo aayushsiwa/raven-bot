@@ -11,6 +11,7 @@ from app.bot.events import register_events
 from services import db
 from services.redis import redis_client
 from services.worker import rss_worker
+from services.monitor import monitor_system
 
 bot = create_bot_client()
 register_prefix_commands(bot)
@@ -54,6 +55,7 @@ async def main():
         os._exit(1)
 
     asyncio.create_task(rss_worker(bot))
+    asyncio.create_task(monitor_system())
 
     # Start API server
     asyncio.create_task(start_api())

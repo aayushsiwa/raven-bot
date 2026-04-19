@@ -67,6 +67,22 @@ def create_fastapi_app(bot: commands.Bot) -> FastAPI:
     )
     app.include_router(create_api_router(bot))
 
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled error: {str(exc)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "type": exc.__class__.__name__},
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        logger.warning(f"HTTP {exc.status_code}: {exc.detail}")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+        )
+
     @app.exception_handler(404)
     async def custom_404_handler(request: Request, __):
         logger.warning(f"404 Not Found: {request.method} {request.url.path}")
