@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, Header
 from config import logger
 from fastapi.responses import RedirectResponse
 from services import db
-from services.redis import blacklist_session_token, redis_client
+from services.redis import blacklist_refresh_token, blacklist_session_token, redis_client
 from skills.rss_cache import (
     fetch_feed_with_cache_paginated,
     fetch_feed_with_url,
@@ -19,7 +19,9 @@ from app.api.schemas import SubscriptionDeletePayload, SubscriptionPayload, Batc
 from app.api.auth import (
     extract_bearer_token,
     hash_password,
+    parse_refresh_token,
     parse_session_token,
+    sign_refresh_token,
     sign_session_token,
     validate_password_or_422,
     verify_password,
@@ -31,7 +33,7 @@ from app.api.oauth import (
     normalized_username_candidates,
     parse_oauth_state,
 )
-from app.api.schemas import FeedPreferencesPayload, LoginPayload, OAuthLoginPayload, SignupPayload
+from app.api.schemas import FeedPreferencesPayload, LoginPayload, OAuthLoginPayload, RefreshTokenPayload, SignupPayload
 
 
 def create_api_router(bot: commands.Bot) -> APIRouter:
@@ -152,8 +154,10 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             raise HTTPException(status_code=409, detail="Username already exists")
 
         token = sign_session_token(user["id"], user["username"])
+        refresh_token = sign_refresh_token(user["id"], user["username"])
         return {
             "token": token,
+            "refresh_token": refresh_token,
             "user": user,
         }
 
@@ -169,8 +173,10 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         token = sign_session_token(user["id"], user["username"])
+        refresh_token = sign_refresh_token(user["id"], user["username"])
         return {
             "token": token,
+            "refresh_token": refresh_token,
             "user": {
                 "id": user["id"],
                 "username": user["username"],
@@ -193,7 +199,8 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         existing = await db.get_user_by_oauth(provider, payload.provider_user_id)
         if existing:
             token = sign_session_token(existing["id"], existing["username"])
-            return {"token": token, "user": existing}
+            refresh_token = sign_refresh_token(existing["id"], existing["username"])
+            return {"token": token, "refresh_token": refresh_token, "user": existing}
 
         user = await db.create_oauth_user(
             username=username,
@@ -207,7 +214,8 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             raise HTTPException(status_code=409, detail="Username already exists")
 
         token = sign_session_token(user["id"], user["username"])
-        return {"token": token, "user": user}
+        refresh_token = sign_refresh_token(user["id"], user["username"])
+        return {"token": token, "refresh_token": refresh_token, "user": user}
 
     @router.get("/api/v1/auth/oauth/{provider}/start")
     async def oauth_start(provider: str, next: str = Query("/")):
@@ -267,6 +275,22 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
     async def auth_me(authorization: Optional[str] = Header(default=None)):
         user, _ = await auth_user_from_header(authorization)
         return {"user": user}
+
+    @router.post("/api/v1/auth/refresh")
+    async def refresh_session(payload: RefreshTokenPayload):
+        claims = parse_refresh_token(payload.refresh_token)
+        user = await db.get_user_by_id(claims["user_id"])
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        blacklist_refresh_token(payload.refresh_token)
+        token = sign_session_token(user["id"], user["username"])
+        refresh_token = sign_refresh_token(user["id"], user["username"])
+        return {
+            "token": token,
+            "refresh_token": refresh_token,
+            "user": user,
+        }
 
     @router.post("/api/v1/auth/logout")
     async def logout(authorization: Optional[str] = Header(default=None)):

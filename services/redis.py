@@ -1,7 +1,8 @@
 import redis
 from config import (
     REDIS_URL,
-    AUTH_TOKEN_TTL_SECONDS,
+    AUTH_ACCESS_TOKEN_TTL_SECONDS,
+    AUTH_REFRESH_TOKEN_TTL_SECONDS,
 )
 
 redis_client = redis.from_url(REDIS_URL)
@@ -16,7 +17,13 @@ RATE_LIMIT_MAX = 100  # requests per window
 def blacklist_session_token(token: str) -> None:
     """Add token to blacklist until expiry."""
     key = f"{TOKEN_BLACKLIST_PREFIX}{token}"
-    redis_client.setex(key, AUTH_TOKEN_TTL_SECONDS, "1")
+    redis_client.setex(key, AUTH_ACCESS_TOKEN_TTL_SECONDS, "1")
+
+
+def blacklist_refresh_token(token: str) -> None:
+    """Add refresh token to blacklist until expiry."""
+    key = f"{TOKEN_BLACKLIST_PREFIX}{token}"
+    redis_client.setex(key, AUTH_REFRESH_TOKEN_TTL_SECONDS, "1")
 
 
 def is_token_blacklisted(token: str) -> bool:

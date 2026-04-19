@@ -42,6 +42,10 @@ class LoginPayload(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
 
 
+class RefreshTokenPayload(BaseModel):
+    refresh_token: str = Field(..., min_length=10)
+
+
 class OAuthLoginPayload(BaseModel):
     provider: str = Field(..., min_length=3, max_length=32)
     provider_user_id: str = Field(..., min_length=1, max_length=128)

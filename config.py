@@ -59,6 +59,12 @@ if not POSTGRES_DSN:
 
 AUTH_SECRET = os.getenv("AUTH_SECRET", "dev-insecure-auth-secret-change-me")
 AUTH_TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", "604800"))
+AUTH_ACCESS_TOKEN_TTL_SECONDS = int(
+    os.getenv("AUTH_ACCESS_TOKEN_TTL_SECONDS", str(AUTH_TOKEN_TTL_SECONDS))
+)
+AUTH_REFRESH_TOKEN_TTL_SECONDS = int(
+    os.getenv("AUTH_REFRESH_TOKEN_TTL_SECONDS", "2592000")
+)
 AUTH_ISSUER = os.getenv("AUTH_ISSUER", "raven-api")
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")

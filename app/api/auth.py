@@ -57,7 +57,21 @@ def sign_session_token(user_id: int, username: str) -> str:
         "sub": str(user_id),
         "username": username,
         "iat": now,
-        "exp": now + config.AUTH_TOKEN_TTL_SECONDS,
+        "exp": now + config.AUTH_ACCESS_TOKEN_TTL_SECONDS,
+        "typ": "access",
+        "iss": config.AUTH_ISSUER,
+    }
+    return jwt.encode(payload, config.AUTH_SECRET, algorithm="HS256")
+
+
+def sign_refresh_token(user_id: int, username: str) -> str:
+    now = int(time.time())
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "iat": now,
+        "exp": now + config.AUTH_REFRESH_TOKEN_TTL_SECONDS,
+        "typ": "refresh",
         "iss": config.AUTH_ISSUER,
     }
     return jwt.encode(payload, config.AUTH_SECRET, algorithm="HS256")
@@ -81,6 +95,30 @@ def parse_session_token(token: str) -> dict:
         }
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+
+def parse_refresh_token(token: str) -> dict:
+    if is_token_blacklisted(token):
+        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+    try:
+        payload = jwt.decode(
+            token,
+            config.AUTH_SECRET,
+            algorithms=["HS256"],
+            issuer=config.AUTH_ISSUER,
+        )
+        if payload.get("typ") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+        return {
+            "user_id": int(payload["sub"]),
+            "username": str(payload["username"]),
+            "issued_at": int(payload["iat"]),
+            "expires_at": int(payload["exp"]),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token") from exc
 
 
 def extract_bearer_token(authorization: str | None) -> str:
