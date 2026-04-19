@@ -87,6 +87,8 @@ def parse_session_token(token: str) -> dict:
             algorithms=["HS256"],
             issuer=config.AUTH_ISSUER,
         )
+        if payload.get("typ") != "access":
+            raise HTTPException(status_code=401, detail="Invalid access token")
         return {
             "user_id": int(payload["sub"]),
             "username": str(payload["username"]),

@@ -33,7 +33,7 @@ from app.api.oauth import (
     normalized_username_candidates,
     parse_oauth_state,
 )
-from app.api.schemas import FeedPreferencesPayload, LoginPayload, OAuthLoginPayload, RefreshTokenPayload, SignupPayload
+from app.api.schemas import FeedPreferencesPayload, LoginPayload, LogoutPayload, OAuthLoginPayload, RefreshTokenPayload, SignupPayload
 
 
 def create_api_router(bot: commands.Bot) -> APIRouter:
@@ -241,7 +241,8 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         existing = await db.get_user_by_oauth(provider, provider_user_id)
         if existing:
             token = sign_session_token(existing["id"], existing["username"])
-            query = urlencode({"token": token})
+            refresh_token = sign_refresh_token(existing["id"], existing["username"])
+            query = urlencode({"token": token, "refresh_token": refresh_token})
             target = f"{config.FRONTEND_URL}{state_payload.get('next', '/') }"
             joiner = "&" if "?" in target else "?"
             return RedirectResponse(url=f"{target}{joiner}{query}", status_code=302)
@@ -266,7 +267,8 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             raise HTTPException(status_code=409, detail="Could not allocate username")
 
         token = sign_session_token(chosen_user["id"], chosen_user["username"])
-        query = urlencode({"token": token})
+        refresh_token = sign_refresh_token(chosen_user["id"], chosen_user["username"])
+        query = urlencode({"token": token, "refresh_token": refresh_token})
         target = f"{config.FRONTEND_URL}{state_payload.get('next', '/') }"
         joiner = "&" if "?" in target else "?"
         return RedirectResponse(url=f"{target}{joiner}{query}", status_code=302)
@@ -293,11 +295,16 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         }
 
     @router.post("/api/v1/auth/logout")
-    async def logout(authorization: Optional[str] = Header(default=None)):
+    async def logout(
+        payload: Optional[LogoutPayload] = None,
+        authorization: Optional[str] = Header(default=None),
+    ):
         """Blacklist current token and log out."""
         user, claims = await auth_user_from_header(authorization)
         token = extract_bearer_token(authorization)
         blacklist_session_token(token)
+        if payload and payload.refresh_token:
+            blacklist_refresh_token(payload.refresh_token)
         return {"status": "logged out", "user_id": user["id"]}
 
     @router.get("/api/v1/user/feed-preferences")
