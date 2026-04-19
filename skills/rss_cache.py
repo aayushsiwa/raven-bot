@@ -49,19 +49,18 @@ def set_cached_feed(provider, category, topic, entries):
         pipeline.zadd(cache_key, {json.dumps(entry, separators=(",", ":")): score})
 
     pipeline.zremrangebyscore(cache_key, "-inf", threshold)
-    trim_cache_to_limit(cache_key, pipeline)
     pipeline.hset(meta_key, mapping={"last_fetched": str(now_ts)})
     pipeline.expire(cache_key, RETENTION_SECONDS * 2)
     pipeline.expire(meta_key, RETENTION_SECONDS * 2)
     pipeline.execute()
+    trim_cache_to_limit(cache_key)
 
 
-def trim_cache_to_limit(cache_key: str, pipeline=None) -> None:
-    owner = pipeline if pipeline is not None else redis_client
-    total = owner.zcard(cache_key)
+def trim_cache_to_limit(cache_key: str) -> None:
+    total = redis_client.zcard(cache_key)
     if total <= MAX_ENTRIES_PER_FEED:
         return
-    owner.zremrangebyrank(cache_key, 0, total - MAX_ENTRIES_PER_FEED - 1)
+    redis_client.zremrangebyrank(cache_key, 0, total - MAX_ENTRIES_PER_FEED - 1)
 
 
 def entry_timestamp(entry: dict, fallback_ts: int) -> int:
