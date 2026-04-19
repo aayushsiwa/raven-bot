@@ -1,14 +1,18 @@
 from typing import Optional, List
 from urllib.parse import urlencode
+from datetime import datetime
 
 import config
 from discord.ext import commands
 from fastapi import APIRouter, HTTPException, Query, Header
+from config import logger
 from fastapi.responses import RedirectResponse
 from services import db
 from services.redis import blacklist_session_token, redis_client
-from skills.rss_cache import fetch_feed_with_cache
-from datetime import datetime
+from skills.rss_cache import (
+    fetch_feed_with_cache_paginated,
+    fetch_feed_with_url,
+)
 
 from app.api.deps import normalize_feed_path
 from app.api.schemas import SubscriptionDeletePayload, SubscriptionPayload, BatchRssPayload, CustomFeedPayload, CustomFeedUpdatePayload, LinkProviderPayload, SaveArticlePayload
@@ -34,6 +38,59 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
     router = APIRouter()
 
     allowed_oauth_providers = {"google", "github", "discord"}
+
+    def parse_entry_ts(entry: dict) -> int:
+        published_iso = entry.get("published_iso")
+        if isinstance(published_iso, str) and published_iso:
+            try:
+                return int(datetime.fromisoformat(published_iso).timestamp())
+            except ValueError:
+                pass
+
+        published = entry.get("published")
+        if isinstance(published, str) and published:
+            try:
+                return int(datetime.fromisoformat(published).timestamp())
+            except ValueError:
+                pass
+
+        return int(datetime.utcnow().timestamp())
+
+    def merge_ranked_stories(buckets: list[dict], limit: int):
+        stories = []
+        seen = set()
+
+        for bucket in buckets:
+            provider = bucket.get("provider")
+            category = bucket.get("category")
+            topic = bucket.get("topic")
+            feed_url = bucket.get("feed_url")
+            for entry in bucket.get("entries", []):
+                dedupe = f"{entry.get('link')}|{entry.get('title')}"
+                if dedupe in seen:
+                    continue
+                seen.add(dedupe)
+                stories.append(
+                    {
+                        "provider": provider,
+                        "category": category,
+                        "topic": topic,
+                        "feed_url": feed_url,
+                        "entry": entry,
+                        "rank_time": parse_entry_ts(entry),
+                    }
+                )
+
+        stories.sort(key=lambda item: item["rank_time"], reverse=True)
+        paged = stories[:limit]
+        next_cursor = (paged[-1]["rank_time"] - 1) if paged else None
+        has_more = len(stories) > limit
+
+        return {
+            "stories": paged,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+        }
 
     def sanitize_username(value: str) -> str:
         normalized = value.strip()
@@ -83,6 +140,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
 
     @router.post("/api/v1/auth/signup")
     async def signup(payload: SignupPayload):
+        logger.info(f"Signup attempt for username: {payload.username}")
         username = sanitize_username(payload.username)
         validate_password_or_422(payload.password)
         exists = await db.username_exists(username)
@@ -101,6 +159,7 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
 
     @router.post("/api/v1/auth/login")
     async def login(payload: LoginPayload):
+        logger.info(f"Login attempt for username: {payload.username}")
         username = sanitize_username(payload.username)
         user = await db.get_user_by_username(username)
         if not user or not user.get("password_hash"):
@@ -279,6 +338,9 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
     async def get_user_personal_feed(
         authorization: Optional[str] = Header(default=None),
         limit: int = Query(12, ge=1, le=30),
+        cursor: Optional[int] = Query(default=None, ge=0),
+        from_ts: Optional[int] = Query(default=None, ge=0),
+        to_ts: Optional[int] = Query(default=None, ge=0),
     ):
         _, claims = await auth_user_from_header(authorization)
 
@@ -286,10 +348,21 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         custom_feeds = await db.list_user_custom_feeds(claims["user_id"])
 
         results = []
+        global_has_more = False
         for choice in choices:
             try:
                 p, c, t = normalize_feed_path(choice["provider"], choice["category"], choice["topic"])
-                entries = fetch_feed_with_cache(p, c, t, limit=limit)
+                payload = fetch_feed_with_cache_paginated(
+                    p,
+                    c,
+                    t,
+                    limit=limit,
+                    cursor=cursor,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                )
+                entries = payload["entries"]
+                global_has_more = global_has_more or payload["has_more"]
                 results.append(
                     {
                         "provider": p,
@@ -307,22 +380,40 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
                 continue
             try:
                 entries = fetch_feed_with_url(feed["url"], limit=limit)
+                filtered_entries = []
+                upper_bound = cursor if cursor is not None else None
+                if to_ts is not None:
+                    upper_bound = min(upper_bound, to_ts) if upper_bound is not None else to_ts
+
+                for entry in entries:
+                    ts = parse_entry_ts(entry)
+                    if upper_bound is not None and ts > upper_bound:
+                        continue
+                    if from_ts is not None and ts < from_ts:
+                        continue
+                    filtered_entries.append(entry)
+
                 results.append(
                     {
                         "provider": "custom",
                         "category": feed.get("category", "custom"),
                         "topic": feed.get("topic", "user"),
                         "feed_url": feed["url"],
-                        "count": len(entries),
-                        "entries": entries,
+                        "count": len(filtered_entries),
+                        "entries": filtered_entries,
                     }
                 )
             except Exception:
                 continue
 
+        ranked = merge_ranked_stories(results, limit)
+
         return {
             "generated_at": datetime.utcnow().isoformat(),
             "results": results,
+            "stories": ranked["stories"],
+            "next_cursor": ranked["next_cursor"],
+            "has_more": ranked["has_more"] or global_has_more,
         }
 
     @router.get("/api/v1/tree")
@@ -373,10 +464,22 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
         category: str = Query(..., description="RSS category"),
         topic: str = Query(..., description="RSS topic"),
         limit: int = Query(5, ge=1, le=30),
+        cursor: Optional[int] = Query(default=None, ge=0),
+        from_ts: Optional[int] = Query(default=None, ge=0),
+        to_ts: Optional[int] = Query(default=None, ge=0),
     ):
         provider, category, topic = normalize_feed_path(provider, category, topic)
 
-        entries = fetch_feed_with_cache(provider, category, topic, limit=limit)
+        payload = fetch_feed_with_cache_paginated(
+            provider,
+            category,
+            topic,
+            limit=limit,
+            cursor=cursor,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
+        entries = payload["entries"]
 
         return {
             "provider": provider,
@@ -385,30 +488,50 @@ def create_api_router(bot: commands.Bot) -> APIRouter:
             "generated_at": datetime.utcnow().isoformat(),
             "count": len(entries),
             "entries": entries,
+            "next_cursor": payload["next_cursor"],
+            "has_more": payload["has_more"],
         }
 
     @router.post("/api/v1/batch/rss")
     async def fetch_batch_rss_entries(payload: BatchRssPayload):
         """Fetches multiple RSS feeds in one request."""
         results = []
+        global_has_more = False
         for feed in payload.feeds:
             try:
                 p, c, t = normalize_feed_path(feed.provider, feed.category, feed.topic)
-                entries = fetch_feed_with_cache(p, c, t, limit=payload.limit)
+                paged = fetch_feed_with_cache_paginated(
+                    p,
+                    c,
+                    t,
+                    limit=payload.limit,
+                    cursor=payload.cursor,
+                    from_ts=payload.from_ts,
+                    to_ts=payload.to_ts,
+                )
+                entries = paged["entries"]
+                global_has_more = global_has_more or paged["has_more"]
                 results.append({
                     "provider": p,
                     "category": c,
                     "topic": t,
                     "count": len(entries),
                     "entries": entries,
+                    "next_cursor": paged["next_cursor"],
+                    "has_more": paged["has_more"],
                 })
             except Exception:
                 # Skip failed feeds in batch
                 continue
+
+        ranked = merge_ranked_stories(results, payload.limit)
         
         return {
             "generated_at": datetime.utcnow().isoformat(),
-            "results": results
+            "results": results,
+            "stories": ranked["stories"],
+            "next_cursor": ranked["next_cursor"],
+            "has_more": ranked["has_more"] or global_has_more,
         }
 
     @router.post("/api/v1/subscriptions")
